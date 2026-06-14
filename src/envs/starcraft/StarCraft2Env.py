@@ -1014,6 +1014,142 @@ class StarCraft2Env(MultiAgentEnv):
         agents_obs = [self.get_obs_agent(i) for i in range(self.n_agents)]
         return agents_obs
 
+    def get_obs_agent_kaitu(self, agent_id):
+        """Teacher (CTCE) observation: all alive units visible (no fog-of-war)."""
+        unit = self.get_unit_by_id(agent_id)
+
+        move_feats_dim = self.get_obs_move_feats_size()
+        enemy_feats_dim = self.get_obs_enemy_feats_size()
+        ally_feats_dim = self.get_obs_ally_feats_size()
+        own_feats_dim = self.get_obs_own_feats_size()
+
+        move_feats = np.zeros(move_feats_dim, dtype=np.float32)
+        enemy_feats = np.zeros(enemy_feats_dim, dtype=np.float32)
+        ally_feats = np.zeros(ally_feats_dim, dtype=np.float32)
+        own_feats = np.zeros(own_feats_dim, dtype=np.float32)
+
+        if unit.health > 0:
+            x = unit.pos.x
+            y = unit.pos.y
+            sight_range = self.unit_sight_range(agent_id)
+
+            avail_actions = self.get_avail_agent_actions(agent_id)
+            for m in range(self.n_actions_move):
+                move_feats[m] = avail_actions[m + 2]
+
+            ind = self.n_actions_move
+
+            if self.obs_pathing_grid:
+                move_feats[
+                    ind : ind + self.n_obs_pathing
+                ] = self.get_surrounding_pathing(unit)
+                ind += self.n_obs_pathing
+
+            if self.obs_terrain_height:
+                move_feats[ind:] = self.get_surrounding_height(unit)
+
+            for e_id, e_unit in self.enemies.items():
+                e_x = e_unit.pos.x
+                e_y = e_unit.pos.y
+                dist = self.distance(x, y, e_x, e_y)
+
+                if e_unit.health > 0:
+                    enemy_feats[e_id, 0] = avail_actions[
+                        self.n_actions_no_attack + e_id
+                    ]
+                    enemy_feats[e_id, 1] = dist / sight_range
+                    enemy_feats[e_id, 2] = (e_x - x) / sight_range
+                    enemy_feats[e_id, 3] = (e_y - y) / sight_range
+
+                    ind = 4
+                    if self.obs_all_health:
+                        enemy_feats[e_id, ind] = (
+                            e_unit.health / e_unit.health_max
+                        )
+                        ind += 1
+                        if self.shield_bits_enemy > 0:
+                            max_shield = self.unit_max_shield(e_unit)
+                            enemy_feats[e_id, ind] = (
+                                e_unit.shield / max_shield
+                            )
+                            ind += 1
+
+                    if self.unit_type_bits > 0:
+                        type_id = self.get_unit_type_id(e_unit, False)
+                        enemy_feats[e_id, ind + type_id] = 1
+
+            al_ids = [
+                al_id for al_id in range(self.n_agents) if al_id != agent_id
+            ]
+            for i, al_id in enumerate(al_ids):
+                al_unit = self.get_unit_by_id(al_id)
+                al_x = al_unit.pos.x
+                al_y = al_unit.pos.y
+                dist = self.distance(x, y, al_x, al_y)
+
+                if al_unit.health > 0:
+                    ally_feats[i, 0] = 1
+                    ally_feats[i, 1] = dist / sight_range
+                    ally_feats[i, 2] = (al_x - x) / sight_range
+                    ally_feats[i, 3] = (al_y - y) / sight_range
+
+                    ind = 4
+                    if self.obs_all_health:
+                        ally_feats[i, ind] = (
+                            al_unit.health / al_unit.health_max
+                        )
+                        ind += 1
+                        if self.shield_bits_ally > 0:
+                            max_shield = self.unit_max_shield(al_unit)
+                            ally_feats[i, ind] = (
+                                al_unit.shield / max_shield
+                            )
+                            ind += 1
+
+                    if self.unit_type_bits > 0:
+                        type_id = self.get_unit_type_id(al_unit, True)
+                        ally_feats[i, ind + type_id] = 1
+                        ind += self.unit_type_bits
+
+                    if self.obs_last_action:
+                        ally_feats[i, ind:] = self.last_action[al_id]
+
+            ind = 0
+            if self.obs_own_health:
+                own_feats[ind] = unit.health / unit.health_max
+                ind += 1
+                if self.shield_bits_ally > 0:
+                    max_shield = self.unit_max_shield(unit)
+                    own_feats[ind] = unit.shield / max_shield
+                    ind += 1
+
+            if self.unit_type_bits > 0:
+                type_id = self.get_unit_type_id(unit, True)
+                own_feats[ind + type_id] = 1
+
+        agent_obs = np.concatenate(
+            (
+                move_feats.flatten(),
+                enemy_feats.flatten(),
+                ally_feats.flatten(),
+                own_feats.flatten(),
+            )
+        )
+
+        if self.obs_timestep_number:
+            agent_obs = np.append(
+                agent_obs, self._episode_steps / self.episode_limit
+            )
+
+        return agent_obs
+
+    def get_obs_kaitu(self):
+        """Returns teacher observations (full visibility per agent)."""
+        return [self.get_obs_agent_kaitu(i) for i in range(self.n_agents)]
+
+    def get_obs_teacher(self):
+        return self.get_obs_kaitu()
+
     def get_state(self):
         """Returns the global state.
         NOTE: This functon should not be used during decentralised execution.
@@ -1173,6 +1309,34 @@ class StarCraft2Env(MultiAgentEnv):
         ally_feats = n_allies * n_ally_feats
 
         return move_feats + enemy_feats + ally_feats + own_feats
+
+    def get_ally_num_attributes(self):
+        return 4 + self.shield_bits_ally + self.unit_type_bits
+
+    def get_enemy_num_attributes(self):
+        return 3 + self.shield_bits_enemy + self.unit_type_bits
+
+    def get_obs_layout(self):
+        n_enemies, n_enemy_feats = self.get_obs_enemy_feats_size()
+        n_allies, n_ally_feats = self.get_obs_ally_feats_size()
+        return {
+            "move_feats": self.get_obs_move_feats_size(),
+            "n_enemies": n_enemies,
+            "n_enemy_feats": n_enemy_feats,
+            "n_allies": n_allies,
+            "n_ally_feats": n_ally_feats,
+            "own_feats": self.get_obs_own_feats_size(),
+            "ally_state_dim": self.get_ally_num_attributes(),
+            "enemy_state_dim": self.get_enemy_num_attributes(),
+            "state_last_action": self.state_last_action,
+            "state_timestep_number": self.state_timestep_number,
+        }
+
+    def get_env_info(self):
+        env_info = super().get_env_info()
+        env_info["obs_teacher_shape"] = self.get_obs_size()
+        env_info["obs_layout"] = self.get_obs_layout()
+        return env_info
 
     def get_state_size(self):
         """Returns the size of the global state."""

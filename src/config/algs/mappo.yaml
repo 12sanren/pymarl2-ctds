@@ -1,0 +1,43 @@
+# =============================================================================
+# MAPPO (Multi-Agent PPO) 配置 — 基于 ippo.yaml
+# =============================================================================
+# 特点：集中式 Critic + 参数共享 Actor + GAE + Value Normalization
+# 与 IPPO 的区别：PPO learner 内建集中式 Critic（NMAC），使用全局状态
+# =============================================================================
+
+action_selector: "multinomial"
+epsilon_start: .0
+epsilon_finish: .0
+epsilon_anneal_time: 100000
+mask_before_softmax: True
+
+runner: "parallel"
+
+buffer_size: 64
+batch_size_run: 8
+batch_size: 64
+accumulated_episodes: 8
+
+mac: 'basic_mac'
+agent: 'n_rnn'
+t_max: 3000000
+
+obs_agent_id: True
+
+lr: 0.0005
+critic_coef: 0.5
+entropy: 0.01
+gae_lambda: 0.95
+mini_epochs: 8
+eps_clip: 0.2
+save_probs: True
+
+agent_output_type: "pi_logits"
+learner: "ppo_learner"
+
+use_layer_norm: True
+use_orthogonal: True
+gain: 0.01
+use_value_norm: True
+
+name: "mappo_env=8"

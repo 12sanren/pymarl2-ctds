@@ -7,6 +7,7 @@ import torch as th
 from types import SimpleNamespace as SN
 from utils.logging import Logger
 from utils.timehelper import time_left, time_str
+from utils.experiment_name import setup_experiment_logging
 from os.path import dirname, abspath
 
 from learners import REGISTRY as le_REGISTRY
@@ -40,13 +41,8 @@ def run(_run, _config, _log):
                                        width=1)
     _log.info("\n\n" + experiment_params + "\n")
 
-    # configure tensorboard logger
-    unique_token = "{}__{}".format(args.name, datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S"))
-    args.unique_token = unique_token
-    if args.use_tensorboard:
-        tb_logs_direc = os.path.join(dirname(dirname(dirname(abspath(__file__)))), "results", "tb_logs")
-        tb_exp_direc = os.path.join(tb_logs_direc, "{}").format(unique_token)
-        logger.setup_tb(tb_exp_direc)
+    setup_experiment_logging(_config, args, logger)
+    _log.info("Experiment log name: {}".format(args.unique_token))
 
     # sacred is on by default
     logger.setup_sacred(_run)

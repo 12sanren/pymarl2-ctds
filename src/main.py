@@ -3,12 +3,14 @@ import os
 import collections
 from os.path import dirname, abspath, join
 from copy import deepcopy
+from datetime import datetime
 from sacred import Experiment, SETTINGS
 from sacred.observers import FileStorageObserver
 from sacred.utils import apply_backspaces_and_linefeeds
 import sys
 import torch as th
 from utils.logging import get_logger
+from utils.experiment_name import apply_cli_overrides, build_experiment_name, get_map_name
 import yaml
 
 from run import REGISTRY as run_REGISTRY
@@ -97,15 +99,21 @@ if __name__ == '__main__':
     # config_dict = {**config_dict, **env_config, **alg_config}
     config_dict = recursive_dict_update(config_dict, env_config)
     config_dict = recursive_dict_update(config_dict, alg_config)
+    apply_cli_overrides(config_dict, params)
+
+    config_name = parse_command(params, "--config", "default")
+    config_dict["config_name"] = config_name
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    experiment_name = build_experiment_name(config_dict, timestamp=timestamp)
+    config_dict["experiment_name"] = experiment_name
+    map_name = get_map_name(config_dict)
 
     # now add all the config to sacred
     ex.add_config(config_dict)
 
     # Save to disk by default for sacred
-    map_name = parse_command(params, "env_args.map_name", config_dict['env_args']['map_name'])
-    algo_name = parse_command(params, "name", config_dict['name']) 
-    file_obs_path = join(results_path, "sacred", map_name, algo_name)
-    
+    file_obs_path = join(results_path, "sacred", map_name, experiment_name)
+
     logger.info("Saving to FileStorageObserver in {}.".format(file_obs_path))
     ex.observers.append(FileStorageObserver.create(file_obs_path))
 
