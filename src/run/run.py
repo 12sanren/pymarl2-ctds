@@ -244,6 +244,7 @@ def run_sequential_teach(args, logger):
     args.state_shape = env_info["state_shape"]
     args.accumulated_episodes = getattr(args, "accumulated_episodes", None)
     obs_teacher_shape = env_info.get("obs_teacher_shape", env_info["obs_shape"])
+    share_obs_shape = env_info.get("share_obs_shape", obs_teacher_shape)
 
     if getattr(args, "agent", "") in ("teacher_attn", "teacher_rel", "teacher_pair"):
         if "obs_layout" not in env_info:
@@ -256,6 +257,7 @@ def run_sequential_teach(args, logger):
         "state": {"vshape": env_info["state_shape"]},
         "obs": {"vshape": env_info["obs_shape"], "group": "agents"},
         "obs_teacher": {"vshape": obs_teacher_shape, "group": "agents"},
+        "share_obs": {"vshape": share_obs_shape, "group": "agents"},
         "actions": {"vshape": (1,), "group": "agents", "dtype": th.long},
         "avail_actions": {"vshape": (env_info["n_actions"],), "group": "agents", "dtype": th.int},
         "probs": {"vshape": (env_info["n_actions"],), "group": "agents", "dtype": th.float},

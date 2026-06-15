@@ -62,12 +62,25 @@ class EpisodeRunnerTeach:
             return self.env.get_obs_kaitu()
         return self.env.get_obs()
 
+    def _share_obs(self):
+        if not hasattr(self.env, "get_share_obs"):
+            return self._teacher_obs()
+        share = self.env.get_share_obs()
+        if getattr(self.env, "teacher_add_local_obs", False):
+            local = self.env.get_obs()
+            return [
+                np.concatenate([share[i], local[i]]).astype(np.float32)
+                for i in range(len(share))
+            ]
+        return share
+
     def _pre_transition_data(self):
         return {
             "state": [self.env.get_state()],
             "avail_actions": [self.env.get_avail_actions()],
             "obs": [self.env.get_obs()],
             "obs_teacher": [self._teacher_obs()],
+            "share_obs": [self._share_obs()],
         }
 
     def run(self, test_mode=False):

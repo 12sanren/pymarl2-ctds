@@ -1,0 +1,143 @@
+{
+  "artifacts": [],
+  "command": "my_main",
+  "experiment": {
+    "base_dir": "/mnt/pami23/junzhang/MARL/pymarl2/src",
+    "dependencies": [
+      "munch==2.5.0",
+      "numpy==1.24.4",
+      "PyYAML==5.3.1",
+      "sacred==0.8.2",
+      "torch==1.12.1+cu116"
+    ],
+    "mainfile": "main.py",
+    "name": "pymarl",
+    "repositories": [
+      {
+        "commit": "8d9786bf2dcdb9e4509f6f22631efa41ad4ffe03",
+        "dirty": true,
+        "url": "https://github.com/12sanren/pymarl2-ctds.git"
+      },
+      {
+        "commit": "8d9786bf2dcdb9e4509f6f22631efa41ad4ffe03",
+        "dirty": true,
+        "url": "https://github.com/12sanren/pymarl2-ctds.git"
+      },
+      {
+        "commit": "8d9786bf2dcdb9e4509f6f22631efa41ad4ffe03",
+        "dirty": true,
+        "url": "https://github.com/12sanren/pymarl2-ctds.git"
+      }
+    ],
+    "sources": [
+      [
+        "main.py",
+        "_sources/main_a35cca3d319d48e4f16a3310a9861d6c.py"
+      ],
+      [
+        "utils/experiment_name.py",
+        "_sources/experiment_name_6e66b49b81689a3e20904935aeb4f4c1.py"
+      ],
+      [
+        "utils/logging.py",
+        "_sources/logging_ce9a261c391cbeae67129d3d806d06da.py"
+      ]
+    ]
+  },
+  "heartbeat": "2026-06-14T16:47:14.297659",
+  "host": {
+    "ENV": {},
+    "cpu": "AMD EPYC 7542 32-Core Processor",
+    "gpus": {
+      "driver_version": "580.65.06",
+      "gpus": [
+        {
+          "model": "NVIDIA GeForce RTX 4090 D",
+          "persistence_mode": false,
+          "total_memory": 24564
+        },
+        {
+          "model": "NVIDIA GeForce RTX 4090 D",
+          "persistence_mode": false,
+          "total_memory": 24564
+        },
+        {
+          "model": "NVIDIA GeForce RTX 4090 D",
+          "persistence_mode": false,
+          "total_memory": 24564
+        },
+        {
+          "model": "NVIDIA GeForce RTX 4090 D",
+          "persistence_mode": false,
+          "total_memory": 24564
+        },
+        {
+          "model": "NVIDIA GeForce RTX 4090 D",
+          "persistence_mode": false,
+          "total_memory": 24564
+        },
+        {
+          "model": "NVIDIA GeForce RTX 4090 D",
+          "persistence_mode": false,
+          "total_memory": 24564
+        },
+        {
+          "model": "NVIDIA GeForce RTX 4090 D",
+          "persistence_mode": false,
+          "total_memory": 24564
+        },
+        {
+          "model": "NVIDIA GeForce RTX 4090 D",
+          "persistence_mode": false,
+          "total_memory": 24564
+        }
+      ]
+    },
+    "hostname": "145.pami.group",
+    "os": [
+      "Linux",
+      "Linux-6.14.0-33-generic-x86_64-with-glibc2.2.5"
+    ],
+    "python_version": "3.8.20"
+  },
+  "meta": {
+    "command": "my_main",
+    "options": {
+      "--beat-interval": null,
+      "--capture": null,
+      "--comment": null,
+      "--debug": false,
+      "--enforce_clean": false,
+      "--file_storage": null,
+      "--force": false,
+      "--help": false,
+      "--loglevel": null,
+      "--mongo_db": null,
+      "--name": null,
+      "--pdb": false,
+      "--print-config": false,
+      "--priority": null,
+      "--queue": false,
+      "--s3": null,
+      "--sql": null,
+      "--tiny_db": null,
+      "--unobserved": false,
+      "COMMAND": null,
+      "UPDATE": [
+        "env_args.map_name=MMM2",
+        "runner=parallel",
+        "batch_size_run=8",
+        "t_max=3000000",
+        "seed=0",
+        "use_cuda=true",
+        "use_tensorboard=true"
+      ],
+      "help": false,
+      "with": true
+    }
+  },
+  "resources": [],
+  "result": null,
+  "start_time": "2026-06-14T08:31:22.743380",
+  "status": "RUNNING"
+}

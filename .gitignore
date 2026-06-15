@@ -5,3 +5,6 @@ __pycache__/
 *.png
 *.zip
 .DS_Store
+
+# TensorBoard logs are large and reproducible locally
+results/tb_logs/

@@ -94,6 +94,9 @@ class StarCraft2Env(MultiAgentEnv):
         heuristic_ai=False,
         heuristic_rest=False,
         debug=False,
+        teacher_add_center_xy=True,
+        teacher_state_agent_id=True,
+        teacher_add_local_obs=False,
     ):
         """
         Create a StarCraftC2Env environment.
@@ -233,6 +236,9 @@ class StarCraft2Env(MultiAgentEnv):
         self.heuristic_ai = heuristic_ai
         self.heuristic_rest = heuristic_rest
         self.debug = debug
+        self.teacher_add_center_xy = teacher_add_center_xy
+        self.teacher_state_agent_id = teacher_state_agent_id
+        self.teacher_add_local_obs = teacher_add_local_obs
         self.window_size = (window_size_x, window_size_y)
         self.replay_dir = replay_dir
         self.replay_prefix = replay_prefix
@@ -1150,6 +1156,246 @@ class StarCraft2Env(MultiAgentEnv):
     def get_obs_teacher(self):
         return self.get_obs_kaitu()
 
+    def get_state_enemy_feats_size(self):
+        """MAPPO-style per-agent centralized enemy feature width."""
+        nf_en = 5 + self.unit_type_bits
+        if self.obs_all_health:
+            nf_en += 1 + self.shield_bits_enemy
+        if self.teacher_add_center_xy:
+            nf_en += 2
+        return self.n_enemies, nf_en
+
+    def get_state_ally_feats_size(self):
+        """MAPPO-style per-agent centralized ally feature width."""
+        nf_al = 5 + self.unit_type_bits
+        if self.obs_all_health:
+            nf_al += 1 + self.shield_bits_ally
+        if self.teacher_add_center_xy:
+            nf_al += 2
+        if self.state_last_action:
+            nf_al += self.n_actions
+        return self.n_agents - 1, nf_al
+
+    def get_state_own_feats_size(self):
+        """MAPPO-style own features inside get_state_agent."""
+        own_feats = 4 + self.unit_type_bits
+        if self.obs_own_health:
+            own_feats += 1 + self.shield_bits_ally
+        if self.state_last_action:
+            own_feats += self.n_actions
+        if self.teacher_add_center_xy:
+            own_feats += 2
+        return own_feats
+
+    def get_state_agent(self, agent_id):
+        """MAPPO centralized critic observation for a single agent."""
+        if self.obs_instead_of_state:
+            return np.concatenate(self.get_obs(), axis=0).astype(np.float32)
+
+        unit = self.get_unit_by_id(agent_id)
+
+        move_feats_dim = self.get_obs_move_feats_size()
+        n_enemies, n_enemy_feats = self.get_state_enemy_feats_size()
+        n_allies, n_ally_feats = self.get_state_ally_feats_size()
+        own_feats_dim = self.get_state_own_feats_size()
+
+        move_feats = np.zeros(move_feats_dim, dtype=np.float32)
+        enemy_feats = np.zeros((n_enemies, n_enemy_feats), dtype=np.float32)
+        ally_feats = np.zeros((n_allies, n_ally_feats), dtype=np.float32)
+        own_feats = np.zeros(own_feats_dim, dtype=np.float32)
+        agent_id_feats = np.zeros(self.n_agents, dtype=np.float32)
+
+        center_x = self.map_x / 2
+        center_y = self.map_y / 2
+
+        if unit.health > 0:
+            x = unit.pos.x
+            y = unit.pos.y
+            sight_range = self.unit_sight_range(agent_id)
+
+            avail_actions = self.get_avail_agent_actions(agent_id)
+            for m in range(self.n_actions_move):
+                move_feats[m] = avail_actions[m + 2]
+
+            ind = self.n_actions_move
+
+            if self.obs_pathing_grid:
+                move_feats[
+                    ind : ind + self.n_obs_pathing
+                ] = self.get_surrounding_pathing(unit)
+                ind += self.n_obs_pathing
+
+            if self.obs_terrain_height:
+                move_feats[ind:] = self.get_surrounding_height(unit)
+
+            for e_id, e_unit in self.enemies.items():
+                e_x = e_unit.pos.x
+                e_y = e_unit.pos.y
+                dist = self.distance(x, y, e_x, e_y)
+
+                if e_unit.health > 0:
+                    if unit.health > 0:
+                        enemy_feats[e_id, 0] = avail_actions[
+                            self.n_actions_no_attack + e_id
+                        ]
+                        enemy_feats[e_id, 1] = dist / sight_range
+                        enemy_feats[e_id, 2] = (e_x - x) / sight_range
+                        enemy_feats[e_id, 3] = (e_y - y) / sight_range
+                        if dist < sight_range:
+                            enemy_feats[e_id, 4] = 1
+
+                    ind = 5
+                    if self.obs_all_health:
+                        enemy_feats[e_id, ind] = (
+                            e_unit.health / e_unit.health_max
+                        )
+                        ind += 1
+                        if self.shield_bits_enemy > 0:
+                            max_shield = self.unit_max_shield(e_unit)
+                            enemy_feats[e_id, ind] = (
+                                e_unit.shield / max_shield
+                            )
+                            ind += 1
+
+                    if self.unit_type_bits > 0:
+                        type_id = self.get_unit_type_id(e_unit, False)
+                        enemy_feats[e_id, ind + type_id] = 1
+                        ind += self.unit_type_bits
+
+                    if self.teacher_add_center_xy:
+                        enemy_feats[e_id, ind] = (
+                            e_x - center_x
+                        ) / self.max_distance_x
+                        enemy_feats[e_id, ind + 1] = (
+                            e_y - center_y
+                        ) / self.max_distance_y
+
+            al_ids = [
+                al_id for al_id in range(self.n_agents) if al_id != agent_id
+            ]
+            for i, al_id in enumerate(al_ids):
+                al_unit = self.get_unit_by_id(al_id)
+                al_x = al_unit.pos.x
+                al_y = al_unit.pos.y
+                dist = self.distance(x, y, al_x, al_y)
+                max_cd = self.unit_max_cooldown(al_unit)
+
+                if al_unit.health > 0:
+                    if unit.health > 0:
+                        if dist < sight_range:
+                            ally_feats[i, 0] = 1
+                        ally_feats[i, 1] = dist / sight_range
+                        ally_feats[i, 2] = (al_x - x) / sight_range
+                        ally_feats[i, 3] = (al_y - y) / sight_range
+
+                    if (
+                        self.map_type == "MMM"
+                        and al_unit.unit_type == self.medivac_id
+                    ):
+                        ally_feats[i, 4] = al_unit.energy / max_cd
+                    else:
+                        ally_feats[i, 4] = al_unit.weapon_cooldown / max_cd
+
+                    ind = 5
+                    if self.obs_all_health:
+                        ally_feats[i, ind] = (
+                            al_unit.health / al_unit.health_max
+                        )
+                        ind += 1
+                        if self.shield_bits_ally > 0:
+                            max_shield = self.unit_max_shield(al_unit)
+                            ally_feats[i, ind] = (
+                                al_unit.shield / max_shield
+                            )
+                            ind += 1
+
+                    if self.teacher_add_center_xy:
+                        ally_feats[i, ind] = (
+                            al_x - center_x
+                        ) / self.max_distance_x
+                        ally_feats[i, ind + 1] = (
+                            al_y - center_y
+                        ) / self.max_distance_y
+                        ind += 2
+
+                    if self.unit_type_bits > 0:
+                        type_id = self.get_unit_type_id(al_unit, True)
+                        ally_feats[i, ind + type_id] = 1
+                        ind += self.unit_type_bits
+
+                    if self.state_last_action:
+                        ally_feats[i, ind:] = self.last_action[al_id]
+
+            ind = 0
+            own_feats[0] = 1
+            own_feats[1] = 0
+            own_feats[2] = 0
+            own_feats[3] = 0
+            ind = 4
+            if self.obs_own_health:
+                own_feats[ind] = unit.health / unit.health_max
+                ind += 1
+                if self.shield_bits_ally > 0:
+                    max_shield = self.unit_max_shield(unit)
+                    own_feats[ind] = unit.shield / max_shield
+                    ind += 1
+
+            if self.teacher_add_center_xy:
+                own_feats[ind] = (x - center_x) / self.max_distance_x
+                own_feats[ind + 1] = (y - center_y) / self.max_distance_y
+                ind += 2
+
+            if self.unit_type_bits > 0:
+                type_id = self.get_unit_type_id(unit, True)
+                own_feats[ind + type_id] = 1
+                ind += self.unit_type_bits
+
+            if self.state_last_action:
+                own_feats[ind:] = self.last_action[agent_id]
+
+        state = np.concatenate(
+            (
+                ally_feats.flatten(),
+                enemy_feats.flatten(),
+                move_feats.flatten(),
+                own_feats.flatten(),
+            )
+        )
+
+        if self.teacher_state_agent_id:
+            agent_id_feats[agent_id] = 1.0
+            state = np.append(state, agent_id_feats.flatten())
+
+        if self.state_timestep_number:
+            state = np.append(
+                state, self._episode_steps / self.episode_limit
+            )
+
+        return state.astype(dtype=np.float32)
+
+    def get_share_obs(self):
+        """Per-agent MAPPO-style centralized observations for CTDS+ teacher."""
+        return [self.get_state_agent(i) for i in range(self.n_agents)]
+
+    def get_share_obs_size(self):
+        n_enemies, n_enemy_feats = self.get_state_enemy_feats_size()
+        n_allies, n_ally_feats = self.get_state_ally_feats_size()
+        move_feats = self.get_obs_move_feats_size()
+        own_feats = self.get_state_own_feats_size()
+        size = (
+            n_allies * n_ally_feats
+            + n_enemies * n_enemy_feats
+            + move_feats
+            + own_feats
+        )
+        if self.teacher_state_agent_id:
+            size += self.n_agents
+        if self.state_timestep_number:
+            size += 1
+        if self.teacher_add_local_obs:
+            size += self.get_obs_size()
+        return size
+
     def get_state(self):
         """Returns the global state.
         NOTE: This functon should not be used during decentralised execution.
@@ -1319,6 +1565,8 @@ class StarCraft2Env(MultiAgentEnv):
     def get_obs_layout(self):
         n_enemies, n_enemy_feats = self.get_obs_enemy_feats_size()
         n_allies, n_ally_feats = self.get_obs_ally_feats_size()
+        share_n_enemies, share_n_enemy_feats = self.get_state_enemy_feats_size()
+        share_n_allies, share_n_ally_feats = self.get_state_ally_feats_size()
         return {
             "move_feats": self.get_obs_move_feats_size(),
             "n_enemies": n_enemies,
@@ -1330,11 +1578,22 @@ class StarCraft2Env(MultiAgentEnv):
             "enemy_state_dim": self.get_enemy_num_attributes(),
             "state_last_action": self.state_last_action,
             "state_timestep_number": self.state_timestep_number,
+            "share_move_feats": self.get_obs_move_feats_size(),
+            "share_n_enemies": share_n_enemies,
+            "share_n_enemy_feats": share_n_enemy_feats,
+            "share_n_allies": share_n_allies,
+            "share_n_ally_feats": share_n_ally_feats,
+            "share_own_feats": self.get_state_own_feats_size(),
+            "share_agent_id_feats": self.n_agents if self.teacher_state_agent_id else 0,
+            "share_timestep_feats": 1 if self.state_timestep_number else 0,
+            "teacher_add_local_obs": self.teacher_add_local_obs,
+            "teacher_add_center_xy": self.teacher_add_center_xy,
         }
 
     def get_env_info(self):
         env_info = super().get_env_info()
         env_info["obs_teacher_shape"] = self.get_obs_size()
+        env_info["share_obs_shape"] = self.get_share_obs_size()
         env_info["obs_layout"] = self.get_obs_layout()
         return env_info
 

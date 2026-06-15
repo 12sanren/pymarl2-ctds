@@ -1,4 +1,5 @@
-# --- CTDS+ with MAPPO-style teacher (QMIX + KD unchanged) ---
+# --- CTDS+ Lite: MAPPO share_obs + unit cross-attn only (no agent relation) ---
+# Faster (~CTDS wall-clock). Strong on MMM2 in our runs; use for large maps / speed.
 
 action_selector: "epsilon_greedy"
 epsilon_start: 1.0
@@ -38,17 +39,10 @@ paradigm: "CTDS"
 teacher_only: False
 num_circle: 1
 
-# TeacherAttnAgent v2 (rel): unit cross-attn + agent-level relation
 attn_dim: 64
 attn_heads: 4
 use_distance_bias: True
 distance_bias_scale: 1.0
-use_agent_relation: True
-agent_rel_layers: 1
+use_agent_relation: False
 
-# MAPPO env flags (passed via env_args in run scripts)
-# teacher_add_center_xy: true
-# teacher_state_agent_id: true
-# teacher_add_local_obs: false
-
-name: "ctds_plus_rel_qmix_env=8_adam_td_lambda"
+name: "ctds_plus_lite_qmix_env=8_adam_td_lambda"

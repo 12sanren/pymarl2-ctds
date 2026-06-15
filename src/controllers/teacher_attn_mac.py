@@ -5,7 +5,7 @@ from components.action_selectors import REGISTRY as action_REGISTRY
 
 
 class TeacherAttnMAC:
-    """CTCE teacher MAC with attention-based agent over obs_teacher + state."""
+    """CTCE teacher MAC: MAPPO share_obs with unit + agent relation modeling."""
 
     def __init__(self, scheme, groups, args):
         self.n_agents = args.n_agents
@@ -29,8 +29,7 @@ class TeacherAttnMAC:
             self.agent.train()
 
         batch_dict = {
-            "obs_teacher": ep_batch["obs_teacher"][:, t],
-            "state": ep_batch["state"][:, t],
+            "share_obs": ep_batch["share_obs"][:, t],
         }
         agent_outs, self.hidden_states = self.agent(batch_dict, self.hidden_states)
 

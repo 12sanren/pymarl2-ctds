@@ -89,6 +89,7 @@ class ParallelRunnerTeach:
             "avail_actions": [],
             "obs": [],
             "obs_teacher": [],
+            "share_obs": [],
         }
         for parent_conn in self.parent_conns:
             data = parent_conn.recv()
@@ -96,6 +97,7 @@ class ParallelRunnerTeach:
             pre_transition_data["avail_actions"].append(data["avail_actions"])
             pre_transition_data["obs"].append(data["obs"])
             pre_transition_data["obs_teacher"].append(data["obs_teacher"])
+            pre_transition_data["share_obs"].append(data["share_obs"])
 
         self.batch.update(pre_transition_data, ts=0)
 
@@ -176,6 +178,7 @@ class ParallelRunnerTeach:
                 "avail_actions": [],
                 "obs": [],
                 "obs_teacher": [],
+                "share_obs": [],
             }
 
             for idx, parent_conn in enumerate(self.parent_conns):
@@ -202,6 +205,7 @@ class ParallelRunnerTeach:
                     pre_transition_data["avail_actions"].append(data["avail_actions"])
                     pre_transition_data["obs"].append(data["obs"])
                     pre_transition_data["obs_teacher"].append(data["obs_teacher"])
+                    pre_transition_data["share_obs"].append(data["share_obs"])
 
             self.batch.update(
                 post_transition_data,
@@ -285,6 +289,19 @@ def _obs_teacher(env):
     return env.get_obs()
 
 
+def _share_obs(env):
+    if not hasattr(env, "get_share_obs"):
+        return _obs_teacher(env)
+    share = env.get_share_obs()
+    if getattr(env, "teacher_add_local_obs", False):
+        local = env.get_obs()
+        return [
+            np.concatenate([share[i], local[i]]).astype(np.float32)
+            for i in range(len(share))
+        ]
+    return share
+
+
 def teach_env_worker(remote, env_fn):
     env = env_fn.x()
     while True:
@@ -298,6 +315,7 @@ def teach_env_worker(remote, env_fn):
                     "avail_actions": env.get_avail_actions(),
                     "obs": env.get_obs(),
                     "obs_teacher": _obs_teacher(env),
+                    "share_obs": _share_obs(env),
                     "reward": reward,
                     "terminated": terminated,
                     "info": env_info,
@@ -311,6 +329,7 @@ def teach_env_worker(remote, env_fn):
                     "avail_actions": env.get_avail_actions(),
                     "obs": env.get_obs(),
                     "obs_teacher": _obs_teacher(env),
+                    "share_obs": _share_obs(env),
                 }
             )
         elif cmd == "close":

@@ -30,6 +30,9 @@ env_args:
   heuristic_ai: False
   heuristic_rest: False
   debug: False
+  teacher_add_center_xy: True
+  teacher_state_agent_id: True
+  teacher_add_local_obs: False
 
 test_greedy: True
 test_nepisode: 32
